@@ -1,0 +1,9 @@
+<!--
+  Drop the built jar into $CATALINA_HOME/lib, then point your connector
+  at the custom protocol class instead of the usual "HTTP/1.1" alias.
+-->
+<Connector port="8080"
+           protocol="org.fakebelieve.tomcat.FilteringHttp11NioProtocol"
+           connectionTimeout="20000"
+           redirectPort="8443"
+           blockedIpsFile="conf/blocked-ips.txt" />
