@@ -12,7 +12,7 @@ import java.util.Set;
 import org.apache.tomcat.util.net.NioEndpoint;
 
 /**
- * NioEndpoint that rejects connections from blocked IPs at accept() time,
+ * NioEndpoint that rejects connections from blocked IPs or non-allowed IPs at accept() time,
  * before any TLS handshake or HTTP parsing takes place.
  *
  * Wired into Tomcat via FilteringHttp11NioProtocol and the connector's
@@ -21,9 +21,13 @@ import org.apache.tomcat.util.net.NioEndpoint;
 public class FilteringNioEndpoint extends NioEndpoint {
 
     private volatile Set<String> blockedIps = Set.of();
+    private volatile Set<String> allowedIps = Set.of();
 
     private String blockedIpsFile;
-    private long fileLastModified = 0L;
+    private String allowedIpsFile;
+
+    private long blockedFileLastModified = 0L;
+    private long allowedFileLastModified = 0L;
     private long lastCheckedTime = 0L;
     private static final long CHECK_INTERVAL_MS = 5000; // Throttle check to every 5 seconds
 
@@ -31,14 +35,36 @@ public class FilteringNioEndpoint extends NioEndpoint {
         return blockedIps.contains(ip);
     }
 
+    public boolean isAllowed(String ip) {
+        return allowedIps.contains(ip);
+    }
+
     public void setBlockedIpsFile(String filePath) {
         this.blockedIpsFile = filePath;
-	this.fileLastModified = 0L;
+        this.blockedFileLastModified = 0L;
         loadBlockedIpsFromFile(filePath);
     }
 
     public String getBlockedIpsFile() {
         return blockedIpsFile;
+    }
+
+    public void setAllowedIpsFile(String filePath) {
+        this.allowedIpsFile = filePath;
+        this.allowedFileLastModified = 0L;
+        loadAllowedIpsFromFile(filePath);
+    }
+
+    public void setAllowedIpFile(String filePath) {
+        setAllowedIpsFile(filePath);
+    }
+
+    public String getAllowedIpsFile() {
+        return allowedIpsFile;
+    }
+
+    public String getAllowedIpFile() {
+        return allowedIpsFile;
     }
 
     private File resolveFile(String filePath) {
@@ -55,22 +81,17 @@ public class FilteringNioEndpoint extends NioEndpoint {
         return file;
     }
 
-    public synchronized void loadBlockedIpsFromFile(String filePath) {
+    private Set<String> loadIpsFromFile(String filePath) {
         File file = resolveFile(filePath);
         if (file == null) {
-            return;
+            return null;
         }
-
-        getLog().info("Loading blocked IPs from file: " + file.getAbsolutePath());
 
         if (!file.exists() || !file.isFile()) {
-            getLog().warn("Blocked IPs file not found or not a valid file: " + file.getAbsolutePath());
-            return;
+            return null;
         }
 
-        this.fileLastModified = file.lastModified();
         Set<String> tempSet = new HashSet<>();
-        int count = 0;
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -103,22 +124,61 @@ public class FilteringNioEndpoint extends NioEndpoint {
 
                 if (!line.isEmpty()) {
                     tempSet.add(line);
-                    count++;
                 }
             }
-            // Atomically swap in an immutable, read-only set
-            this.blockedIps = Set.copyOf(tempSet);
-            getLog().info("Successfully loaded and replaced blocked IPs with " + count + " IP(s) from " + file.getAbsolutePath());
+            return Set.copyOf(tempSet);
         } catch (IOException e) {
-            getLog().error("Failed to read blocked IPs file: " + file.getAbsolutePath(), e);
+            getLog().error("Failed to read IPs file: " + file.getAbsolutePath(), e);
+            return null;
         }
     }
 
-    private void checkAndReloadFile() {
-        if (blockedIpsFile == null || blockedIpsFile.trim().isEmpty()) {
+    public synchronized void loadBlockedIpsFromFile(String filePath) {
+        this.blockedIpsFile = filePath;
+        File file = resolveFile(filePath);
+        if (file == null) {
             return;
         }
 
+        getLog().info("Loading blocked IPs from file: " + file.getAbsolutePath());
+
+        if (!file.exists() || !file.isFile()) {
+            getLog().warn("Blocked IPs file not found or not a valid file: " + file.getAbsolutePath());
+            return;
+        }
+
+        this.blockedFileLastModified = file.lastModified();
+        Set<String> loaded = loadIpsFromFile(filePath);
+        if (loaded != null) {
+            this.blockedIps = loaded;
+            getLog().info("Successfully loaded and replaced blocked IPs with " + loaded.size() + " IP(s) from " + file.getAbsolutePath());
+        }
+    }
+
+    public synchronized void loadAllowedIpsFromFile(String filePath) {
+        this.allowedIpsFile = filePath;
+        File file = resolveFile(filePath);
+        if (file == null) {
+            return;
+        }
+
+        getLog().info("Loading allowed IPs from file: " + file.getAbsolutePath());
+
+        if (!file.exists() || !file.isFile()) {
+            getLog().warn("Allowed IPs file not found or not a valid file: " + file.getAbsolutePath());
+            this.allowedIps = Set.of();
+            return;
+        }
+
+        this.allowedFileLastModified = file.lastModified();
+        Set<String> loaded = loadIpsFromFile(filePath);
+        if (loaded != null) {
+            this.allowedIps = loaded;
+            getLog().info("Successfully loaded and replaced allowed IPs with " + loaded.size() + " IP(s) from " + file.getAbsolutePath());
+        }
+    }
+
+    private void checkAndReloadFiles() {
         long now = System.currentTimeMillis();
         // Quick unsynchronized check to avoid lock contention on every connection
         if (now - lastCheckedTime < CHECK_INTERVAL_MS) {
@@ -133,12 +193,25 @@ public class FilteringNioEndpoint extends NioEndpoint {
             }
             lastCheckedTime = currentNow;
 
-            File file = resolveFile(blockedIpsFile);
-            if (file != null && file.exists() && file.isFile()) {
-                long currentModified = file.lastModified();
-                if (currentModified > fileLastModified) {
-                    getLog().info("Blocked IPs file has changed. Reloading from: " + file.getAbsolutePath());
-                    loadBlockedIpsFromFile(blockedIpsFile);
+            if (blockedIpsFile != null && !blockedIpsFile.trim().isEmpty()) {
+                File file = resolveFile(blockedIpsFile);
+                if (file != null && file.exists() && file.isFile()) {
+                    long currentModified = file.lastModified();
+                    if (currentModified > blockedFileLastModified) {
+                        getLog().info("Blocked IPs file has changed. Reloading from: " + file.getAbsolutePath());
+                        loadBlockedIpsFromFile(blockedIpsFile);
+                    }
+                }
+            }
+
+            if (allowedIpsFile != null && !allowedIpsFile.trim().isEmpty()) {
+                File file = resolveFile(allowedIpsFile);
+                if (file != null && file.exists() && file.isFile()) {
+                    long currentModified = file.lastModified();
+                    if (currentModified > allowedFileLastModified) {
+                        getLog().info("Allowed IPs file has changed. Reloading from: " + file.getAbsolutePath());
+                        loadAllowedIpsFromFile(allowedIpsFile);
+                    }
                 }
             }
         }
@@ -147,8 +220,8 @@ public class FilteringNioEndpoint extends NioEndpoint {
     @Override
     protected SocketChannel serverSocketAccept() throws Exception {
         while (true) {
-            // Periodically check if the blocked IPs file has been modified
-            checkAndReloadFile();
+            // Periodically check if the blocked or allowed IPs files have been modified
+            checkAndReloadFiles();
 
             SocketChannel channel = super.serverSocketAccept();
             if (channel == null) {
@@ -162,14 +235,22 @@ public class FilteringNioEndpoint extends NioEndpoint {
 
             getLog().warn("Checking connection IP: " + remoteIp);
 
-            if (remoteIp != null && isBlocked(remoteIp)) {
-                getLog().warn("Rejected connection from blocked IP: " + remoteIp);
-                try {
-                    channel.close();
-                } catch (Exception ignored) {
-                    // nothing to do
+            if (remoteIp != null) {
+                // If an allow list is configured and the IP is on it, let it through without checking the block list
+                if (isAllowed(remoteIp)) {
+                    getLog().info("Accepted connection from allowed IP: " + remoteIp);
+                    return channel;
                 }
-                continue;
+
+                if (isBlocked(remoteIp)) {
+                    getLog().warn("Rejected connection from blocked IP: " + remoteIp);
+                    try {
+                        channel.close();
+                    } catch (Exception ignored) {
+                        // nothing to do
+                    }
+                    continue;
+                }
             }
 
             return channel;

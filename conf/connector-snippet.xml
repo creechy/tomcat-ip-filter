@@ -6,4 +6,5 @@
            protocol="org.fakebelieve.tomcat.FilteringHttp11NioProtocol"
            connectionTimeout="20000"
            redirectPort="8443"
-           blockedIpsFile="conf/blocked-ips.txt" />
+           blockedIpsFile="conf/blocked-ips.txt"
+           allowedIpsFile="conf/allowed-ips.txt" />
