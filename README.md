@@ -93,44 +93,48 @@ actionstart = touch /usr/local/tomcat/conf/banned-ips.txt && \
 actionstop =
 ```
 
+## Deployment Contexts and Load Balancers
+
+This filter rejects connections at the socket level (`accept()` time) based on the direct remote IP address of the incoming TCP connection. Therefore, **it is only useful when Tomcat is deployed directly on the edge or behind a Layer 4 (Network) Load Balancer** that preserves the client's source IP address. 
+
+If Tomcat is deployed behind a Layer 7 (Application) reverse proxy or load balancer (such as an Nginx reverse proxy, API gateway, or AWS ALB that terminates TLS/HTTP and forwards requests), Tomcat will only see the load balancer's or proxy's internal IP address, rendering IP-based filtering at this layer ineffective for the actual clients. 
+
+### Layer 7 Alternative (Tomcat RewriteValve)
+
+For Layer 7 deployments where you need to block clients based on headers like `X-Forwarded-For`, use Tomcat's built-in `RewriteValve` instead. 
+
+#### Example: Using Tomcat's `RewriteValve` with an External Text File (`RewriteMap`)
+
+Tomcat's `RewriteValve` supports a `RewriteMap` directive (similar to Apache mod_rewrite), allowing you to load an external text file for lookups (such as a blocked IP list):
+
+1. Add the `RewriteValve` to your `<Host>` or `<Context>` in `$CATALINA_HOME/conf/server.xml`:
+   ```xml
+   <Host name="localhost"  appBase="webapps" unpackWARs="true" autoDeploy="true">
+       <Valve className="org.apache.catalina.valves.rewrite.RewriteValve" />
+   </Host>
+   ```
+
+2. Create your block list file (e.g., `$CATALINA_HOME/conf/blocked-ips.txt`) where each line maps an IP to a status value:
+   ```text
+   # /usr/local/tomcat/conf/blocked-ips.txt
+   192.168.1.100 BLOCKED
+   203.0.113.50 BLOCKED
+   ```
+
+3. Configure the `RewriteMap` and rule in your `rewrite.config` file (placed under `$CATALINA_HOME/conf/Catalina/localhost/rewrite.config` or `WEB-INF/rewrite.config`):
+   ```text
+   # Define a text-based map pointing to the block-list file
+   RewriteMap blockedIPs txt:conf/blocked-ips.txt
+
+   # Check if the X-Forwarded-For header exists in the blockedIPs map and return status 444
+   RewriteCond ${blockedIPs:%{HTTP:X-Forwarded-For}} !=""
+   RewriteRule ^.*$ - [R=444]
+   ```
+   *(Note: This allows you to maintain an external text file for Layer 7 requests similar to how socket-level filtering uses files).*
+
 ## Notes
 
 - Only tested against the NIO connector (`Http11NioProtocol` /
   `NioEndpoint`). If APR/native is enabled on your server, this won't
   be used unless you also point the connector explicitly at the NIO
   protocol class (APR has its own `AprEndpoint`, not covered here).
-- **Deployment Context / Load Balancers:** This filter rejects connections at the socket level (`accept()` time) based on the direct remote IP address of the incoming TCP connection. Therefore, **it is only useful when Tomcat is deployed directly on the edge or behind a Layer 4 (Network) Load Balancer** that preserves the client's source IP address. 
-  
-  If Tomcat is deployed behind a Layer 7 (Application) reverse proxy or load balancer (such as an Nginx reverse proxy, API gateway, or AWS ALB that terminates TLS/HTTP and forwards requests), Tomcat will only see the load balancer's or proxy's internal IP address, rendering IP-based filtering at this layer ineffective for the actual clients. 
-  
-  **Layer 7 Alternative (Tomcat RewriteValve):**
-  For Layer 7 deployments where you need to block clients based on headers like `X-Forwarded-For`, use Tomcat's built-in `RewriteValve` instead. 
-
-  ### Example: Using Tomcat's `RewriteValve` with an External Text File (`RewriteMap`)
-
-  Tomcat's `RewriteValve` supports a `RewriteMap` directive (similar to Apache mod_rewrite), allowing you to load an external text file for lookups (such as a blocked IP list):
-
-  1. Add the `RewriteValve` to your `<Host>` or `<Context>` in `$CATALINA_HOME/conf/server.xml`:
-     ```xml
-     <Host name="localhost"  appBase="webapps" unpackWARs="true" autoDeploy="true">
-         <Valve className="org.apache.catalina.valves.rewrite.RewriteValve" />
-     </Host>
-     ```
-
-  2. Create your block list file (e.g., `$CATALINA_HOME/conf/blocked-ips.txt`) where each line maps an IP to a status value:
-     ```text
-     # /usr/local/tomcat/conf/blocked-ips.txt
-     192.168.1.100 BLOCKED
-     203.0.113.50 BLOCKED
-     ```
-
-  3. Configure the `RewriteMap` and rule in your `rewrite.config` file (placed under `$CATALINA_HOME/conf/Catalina/localhost/rewrite.config` or `WEB-INF/rewrite.config`):
-     ```text
-     # Define a text-based map pointing to the block-list file
-     RewriteMap blockedIPs txt:conf/blocked-ips.txt
-
-     # Check if the X-Forwarded-For header exists in the blockedIPs map and return status 444
-     RewriteCond ${blockedIPs:%{HTTP:X-Forwarded-For}} !=""
-     RewriteRule ^.*$ - [R=444]
-     ```
-     *(Note: This allows you to maintain an external text file for Layer 7 requests similar to how socket-level filtering uses files).*
