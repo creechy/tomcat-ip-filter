@@ -63,6 +63,36 @@ If an allowed IPs file is configured, any connection from an IP present on the a
 
 The IP files are monitored for changes; if you modify the files while Tomcat is running, the changes will be automatically detected and reloaded without requiring a restart.
 
+## Fail2ban Integration
+
+You can integrate `tomcat-ip-filter` with [Fail2ban](https://github.com/fail2ban/fail2ban) to automatically block malicious IP addresses by updating your configured `blockedIpsFile` when Fail2ban bans or unbans an IP.
+
+Because `tomcat-ip-filter` dynamically monitors the block list file for changes, any updates made by Fail2ban take effect immediately without requiring a Tomcat restart.
+
+Below is an example custom Fail2ban action (typically placed in `/etc/fail2ban/action.d/tomcat-block.conf`) that manages the block list:
+
+```ini
+[Definition]
+
+# Executed when an IP is banned
+# Appends "IP_ADDRESS BLOCKED" to banned-ips.txt if not already present
+actionban = if ! grep -q "^<ip> " /usr/local/tomcat/conf/banned-ips.txt 2>/dev/null; then \
+                echo "<ip> BLOCKED" >> /usr/local/tomcat/conf/banned-ips.txt; \
+            fi
+
+# Executed when an IP is unbanned
+# Removes any line starting with the IP address from banned-ips.txt
+actionunban = sed -i '/^<ip> /d' /usr/local/tomcat/conf/banned-ips.txt
+
+# Executed when Fail2ban starts/reloads
+# Ensures the banned-ips.txt file exists and has correct permissions
+actionstart = touch /usr/local/tomcat/conf/banned-ips.txt && \
+              chown app:app /usr/local/tomcat/conf/banned-ips.txt 2>/dev/null || true
+
+# Executed when Fail2ban stops
+actionstop =
+```
+
 ## Notes
 
 - Only tested against the NIO connector (`Http11NioProtocol` /
