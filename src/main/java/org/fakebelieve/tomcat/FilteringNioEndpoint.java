@@ -290,8 +290,6 @@ public class FilteringNioEndpoint extends NioEndpoint {
                 remoteIp = addr.getAddress().getHostAddress();
             }
 
-            getLog().warn("Checking connection IP: " + remoteIp);
-
             if (remoteIp != null) {
                 // If an allow list is configured and the IP is on it, let it through without checking the block list
                 if (isAllowed(remoteIp)) {
@@ -300,7 +298,7 @@ public class FilteringNioEndpoint extends NioEndpoint {
                 }
 
                 if (isBlocked(remoteIp)) {
-                    getLog().warn("Rejected connection from blocked IP: " + remoteIp);
+                    getLog().info("Rejected connection from blocked IP: " + remoteIp);
                     try {
                         channel.close();
                     } catch (Exception ignored) {
@@ -309,6 +307,8 @@ public class FilteringNioEndpoint extends NioEndpoint {
                     continue;
                 }
             }
+
+	    getLog().info("Passed through connection from IP: " + remoteIp);
 
             return channel;
         }
