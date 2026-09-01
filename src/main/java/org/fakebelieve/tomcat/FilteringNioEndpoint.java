@@ -164,11 +164,10 @@ public class FilteringNioEndpoint extends NioEndpoint {
 
                 if (!line.isEmpty()) {
                     try {
-                        CidrBlock block = new CidrBlock(line);
-                        tempCidr.add(block);
-                        // If it's a single IP (no slash) or full prefix, we can also record exact match
-                        if (!line.contains("/")) {
-                            // Normalize via InetAddress
+                        if (line.contains("/")) {
+                            CidrBlock block = new CidrBlock(line);
+                            tempCidr.add(block);
+                        } else {
                             try {
                                 InetAddress addr = InetAddress.getByName(line);
                                 tempExact.add(addr.getHostAddress());
