@@ -1,7 +1,7 @@
 # tomcat-ip-filter
 
 A minimal Gradle project that builds a custom Tomcat NIO endpoint
-(`FilteringNioEndpoint`) which rejects connections from blocked IPs (with an optional allow list to bypass block-list checks) at
+(`FilteringNioEndpoint`) which rejects connections from blocked IPs/CIDRs (with an optional allow list to bypass block-list checks) at
 `accept()` time — before TLS handshake or HTTP parsing.
 
 ## Build
@@ -57,11 +57,11 @@ custom protocol class instead of the default `"HTTP/1.1"` alias — see
            redirectPort="8443" />
 ```
 
-The file can contain one IP per line. Blank lines and comments starting with `#` are ignored (inline comments and extra whitespace are also stripped). 
+The file can contain individual IP addresses (IPv4 or IPv6) or CIDR blocks (e.g., `192.168.1.0/24` or `2001:db8::/32`), one per line. Blank lines and comments starting with `#` are ignored (inline comments and extra whitespace are also stripped). 
 
-If an allowed IPs file is configured, any connection from an IP present on the allow list will be permitted immediately, bypassing the block list check. If an IP is not on the allow list, it is still checked against the block list and permitted unless explicitly blocked.
+If an allowed IPs file is configured, any connection from an IP present on the allow list or within an allowed CIDR block will be permitted immediately, bypassing the block list check. If an IP is not on the allow list, it is still checked against the block list and permitted unless explicitly blocked or matching a blocked CIDR block.
 
-The IP files are monitored for changes; if you modify the files while Tomcat is running, the changes will be automatically detected and reloaded without requiring a restart.
+The IP/CIDR files are monitored for changes; if you modify the files while Tomcat is running, the changes will be automatically detected and reloaded without requiring a restart.
 
 ## Fail2ban Integration
 

@@ -4,16 +4,19 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.apache.tomcat.util.net.NioEndpoint;
 
 /**
  * NioEndpoint that rejects connections from blocked IPs or non-allowed IPs at accept() time,
- * before any TLS handshake or HTTP parsing takes place.
+ * before any TLS handshake or HTTP parsing takes place. Supports both single IPs and CIDR blocks.
  *
  * Wired into Tomcat via FilteringHttp11NioProtocol and the connector's
  * "protocol" attribute in server.xml.
@@ -21,7 +24,10 @@ import org.apache.tomcat.util.net.NioEndpoint;
 public class FilteringNioEndpoint extends NioEndpoint {
 
     private volatile Set<String> blockedIps = Set.of();
+    private volatile List<CidrBlock> blockedCidrs = List.of();
+
     private volatile Set<String> allowedIps = Set.of();
+    private volatile List<CidrBlock> allowedCidrs = List.of();
 
     private String blockedIpsFile;
     private String allowedIpsFile;
@@ -32,11 +38,33 @@ public class FilteringNioEndpoint extends NioEndpoint {
     private static final long CHECK_INTERVAL_MS = 5000; // Throttle check to every 5 seconds
 
     public boolean isBlocked(String ip) {
-        return blockedIps.contains(ip);
+        if (ip == null) {
+            return false;
+        }
+        if (blockedIps.contains(ip)) {
+            return true;
+        }
+        for (CidrBlock block : blockedCidrs) {
+            if (block.matches(ip)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public boolean isAllowed(String ip) {
-        return allowedIps.contains(ip);
+        if (ip == null) {
+            return false;
+        }
+        if (allowedIps.contains(ip)) {
+            return true;
+        }
+        for (CidrBlock block : allowedCidrs) {
+            if (block.matches(ip)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void setBlockedIpsFile(String filePath) {
@@ -81,7 +109,17 @@ public class FilteringNioEndpoint extends NioEndpoint {
         return file;
     }
 
-    private Set<String> loadIpsFromFile(String filePath) {
+    private static class IpLoadResult {
+        final Set<String> exactIps;
+        final List<CidrBlock> cidrBlocks;
+
+        IpLoadResult(Set<String> exactIps, List<CidrBlock> cidrBlocks) {
+            this.exactIps = exactIps;
+            this.cidrBlocks = cidrBlocks;
+        }
+    }
+
+    private IpLoadResult loadIpsFromFile(String filePath) {
         File file = resolveFile(filePath);
         if (file == null) {
             return null;
@@ -91,7 +129,9 @@ public class FilteringNioEndpoint extends NioEndpoint {
             return null;
         }
 
-        Set<String> tempSet = new HashSet<>();
+        Set<String> tempExact = new HashSet<>();
+        List<CidrBlock> tempCidr = new ArrayList<>();
+
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -123,10 +163,25 @@ public class FilteringNioEndpoint extends NioEndpoint {
                 }
 
                 if (!line.isEmpty()) {
-                    tempSet.add(line);
+                    try {
+                        CidrBlock block = new CidrBlock(line);
+                        tempCidr.add(block);
+                        // If it's a single IP (no slash) or full prefix, we can also record exact match
+                        if (!line.contains("/")) {
+                            // Normalize via InetAddress
+                            try {
+                                InetAddress addr = InetAddress.getByName(line);
+                                tempExact.add(addr.getHostAddress());
+                            } catch (Exception e) {
+                                tempExact.add(line);
+                            }
+                        }
+                    } catch (Exception e) {
+                        getLog().warn("Invalid IP or CIDR entry ignored: '" + line + "' in file " + file.getAbsolutePath());
+                    }
                 }
             }
-            return Set.copyOf(tempSet);
+            return new IpLoadResult(Set.copyOf(tempExact), List.copyOf(tempCidr));
         } catch (IOException e) {
             getLog().error("Failed to read IPs file: " + file.getAbsolutePath(), e);
             return null;
@@ -140,7 +195,7 @@ public class FilteringNioEndpoint extends NioEndpoint {
             return;
         }
 
-        getLog().info("Loading blocked IPs from file: " + file.getAbsolutePath());
+        getLog().info("Loading blocked IPs/CIDRs from file: " + file.getAbsolutePath());
 
         if (!file.exists() || !file.isFile()) {
             getLog().warn("Blocked IPs file not found or not a valid file: " + file.getAbsolutePath());
@@ -148,10 +203,11 @@ public class FilteringNioEndpoint extends NioEndpoint {
         }
 
         this.blockedFileLastModified = file.lastModified();
-        Set<String> loaded = loadIpsFromFile(filePath);
+        IpLoadResult loaded = loadIpsFromFile(filePath);
         if (loaded != null) {
-            this.blockedIps = loaded;
-            getLog().info("Successfully loaded and replaced blocked IPs with " + loaded.size() + " IP(s) from " + file.getAbsolutePath());
+            this.blockedIps = loaded.exactIps;
+            this.blockedCidrs = loaded.cidrBlocks;
+            getLog().info("Successfully loaded and replaced blocked IPs/CIDRs: " + loaded.exactIps.size() + " exact IP(s), " + loaded.cidrBlocks.size() + " CIDR block(s) from " + file.getAbsolutePath());
         }
     }
 
@@ -162,19 +218,21 @@ public class FilteringNioEndpoint extends NioEndpoint {
             return;
         }
 
-        getLog().info("Loading allowed IPs from file: " + file.getAbsolutePath());
+        getLog().info("Loading allowed IPs/CIDRs from file: " + file.getAbsolutePath());
 
         if (!file.exists() || !file.isFile()) {
             getLog().warn("Allowed IPs file not found or not a valid file: " + file.getAbsolutePath());
             this.allowedIps = Set.of();
+            this.allowedCidrs = List.of();
             return;
         }
 
         this.allowedFileLastModified = file.lastModified();
-        Set<String> loaded = loadIpsFromFile(filePath);
+        IpLoadResult loaded = loadIpsFromFile(filePath);
         if (loaded != null) {
-            this.allowedIps = loaded;
-            getLog().info("Successfully loaded and replaced allowed IPs with " + loaded.size() + " IP(s) from " + file.getAbsolutePath());
+            this.allowedIps = loaded.exactIps;
+            this.allowedCidrs = loaded.cidrBlocks;
+            getLog().info("Successfully loaded and replaced allowed IPs/CIDRs: " + loaded.exactIps.size() + " exact IP(s), " + loaded.cidrBlocks.size() + " CIDR block(s) from " + file.getAbsolutePath());
         }
     }
 

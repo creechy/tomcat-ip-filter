@@ -24,6 +24,16 @@ dependencies {
     compileOnly "org.apache.tomcat:tomcat-catalina:${tomcatVersion}"
     compileOnly "org.apache.tomcat:tomcat-coyote:${tomcatVersion}"
     compileOnly "org.apache.tomcat:tomcat-util:${tomcatVersion}"
+
+    testImplementation "org.apache.tomcat:tomcat-catalina:${tomcatVersion}"
+    testImplementation "org.apache.tomcat:tomcat-coyote:${tomcatVersion}"
+    testImplementation "org.apache.tomcat:tomcat-util:${tomcatVersion}"
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
 }
 
 // Produces a plain jar containing just our two small classes.
