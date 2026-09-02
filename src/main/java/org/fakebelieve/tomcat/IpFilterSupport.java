@@ -10,7 +10,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
-
 import org.apache.juli.logging.Log;
 
 /**
@@ -187,7 +186,8 @@ public class IpFilterSupport {
                     } catch (Exception e) {
                         Log l = getLog();
                         if (l != null) {
-                            l.warn("Invalid IP or CIDR entry ignored: '" + line + "' in file " + file.getAbsolutePath());
+                            l.warn("Invalid IP or CIDR entry ignored: '" + line + "' in file "
+                                    + file.getAbsolutePath());
                         }
                     }
                 }
@@ -227,7 +227,9 @@ public class IpFilterSupport {
             this.blockedIps = loaded.exactIps;
             this.blockedCidrs = loaded.cidrBlocks;
             if (l != null) {
-                l.info("Successfully loaded and replaced blocked addresses: " + loaded.exactIps.size() + " exact IP(s), " + loaded.cidrBlocks.size() + " CIDR block(s) from " + file.getAbsolutePath());
+                l.info("Successfully loaded and replaced blocked addresses: " + loaded.exactIps.size()
+                        + " exact IP(s), " + loaded.cidrBlocks.size() + " CIDR block(s) from "
+                        + file.getAbsolutePath());
             }
         }
     }
@@ -259,7 +261,9 @@ public class IpFilterSupport {
             this.allowedIps = loaded.exactIps;
             this.allowedCidrs = loaded.cidrBlocks;
             if (l != null) {
-                l.info("Successfully loaded and replaced allowed addresses: " + loaded.exactIps.size() + " exact IP(s), " + loaded.cidrBlocks.size() + " CIDR block(s) from " + file.getAbsolutePath());
+                l.info("Successfully loaded and replaced allowed addresses: " + loaded.exactIps.size()
+                        + " exact IP(s), " + loaded.cidrBlocks.size() + " CIDR block(s) from "
+                        + file.getAbsolutePath());
             }
         }
     }

@@ -1,6 +1,6 @@
 # tomcat-ip-filter
 
-`tomcat-ip-filter` is a lightweight, high-performance library providing IP address and CIDR block filtering for Apache Tomcat. It supports both **Layer 4 (Transport/Socket Level)** and **Layer 7 (Application/Valve Level)** filtering, allowing you to secure your Tomcat deployments regardless of your network topology and load balancer configuration.
+`tomcat-ip-filter` is a simple, lightweight library providing IP address and CIDR block filtering for Apache Tomcat. It supports both **Layer 4 (Transport/Socket Level)** and **Layer 7 (Application/Valve Level)** filtering, allowing you to secure your Tomcat deployments regardless of your network topology and load balancer configuration.
 
 Both components share the same robust backend (`IpFilterSupport`), supporting:
 - Individual IP addresses (IPv4 and IPv6)
@@ -70,7 +70,7 @@ Edit `$CATALINA_HOME/conf/server.xml` and configure your Connector to use `org.f
 
 ### Option B: Layer 7 Filtering (`FilteringValve`)
 
-Use this when Tomcat is behind a Layer 7 reverse proxy, API gateway, or load balancer (such as Nginx, HAProxy, or AWS ALB) that terminates TLS/HTTP and forwards traffic. 
+Use this when Tomcat is behind a Layer 7 reverse proxy, API gateway, or load balancer (such as Nginx, HAProxy, or AWS ALB) that terminates TLS/HTTP and forwards traffic.
 
 Combine this with Tomcat's standard `RemoteIpValve` so that `request.getRemoteAddr()` correctly reflects the original client IP forwarded via proxy headers (e.g., `X-Forwarded-For`).
 
@@ -78,7 +78,7 @@ Add the `FilteringValve` to your `<Host>`, `<Context>`, or `<Engine>` block in `
 
 ```xml
 <Host name="localhost"  appBase="webapps" unpackWARs="true" autoDeploy="true">
-    
+
     <!-- Optional: Restores client IP from proxy headers if applicable -->
     <Valve className="org.apache.catalina.valves.RemoteIpValve" />
 

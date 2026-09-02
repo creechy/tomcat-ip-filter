@@ -1,8 +1,8 @@
 package org.fakebelieve.tomcat;
 
+import java.io.IOException;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
 import org.apache.catalina.connector.Request;
 import org.apache.catalina.connector.Response;
 import org.apache.catalina.valves.ValveBase;
@@ -78,7 +78,7 @@ public class FilteringValve extends ValveBase {
 
             // If an allow list is configured, check if the IP is allowed
             if (isAllowed(ip)) {
-		log.info("Allowed request from IP: " + ip);
+                log.info("Allowed request from IP: " + ip);
                 getNext().invoke(request, response);
                 return;
             }
@@ -99,8 +99,8 @@ public class FilteringValve extends ValveBase {
                 return;
             }
 
-	    log.info("Passing through request from IP: " + ip);
-	}
+            log.info("Passing through request from IP: " + ip);
+        }
 
         // Pass through if neither explicitly allowed nor blocked
         getNext().invoke(request, response);
