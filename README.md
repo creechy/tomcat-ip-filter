@@ -99,38 +99,33 @@ This filter rejects connections at the socket level (`accept()` time) based on t
 
 If Tomcat is deployed behind a Layer 7 (Application) reverse proxy or load balancer (such as an Nginx reverse proxy, API gateway, or AWS ALB that terminates TLS/HTTP and forwards requests), Tomcat will only see the load balancer's or proxy's internal IP address, rendering IP-based filtering at this layer ineffective for the actual clients. 
 
-### Layer 7 Alternative (Tomcat RewriteValve)
+### Layer 7 Alternative (`FilteringValve`)
 
-For Layer 7 deployments where you need to block clients based on headers like `X-Forwarded-For`, use Tomcat's built-in `RewriteValve` instead. 
+For Layer 7 deployments (such as behind an Nginx reverse proxy, API gateway, or AWS ALB that terminates TLS/HTTP and forwards requests via headers like `X-Forwarded-For`), you can use the custom `FilteringValve` instead of socket-level filtering.
 
-#### Example: Using Tomcat's `RewriteValve` with an External Text File (`RewriteMap`)
+The `FilteringValve` inspects headers (defaulting to `X-Forwarded-For`, supporting comma-separated chains of IPs) against your block and allow list files, and rejects unauthorized requests with a configurable HTTP error code.
 
-Tomcat's `RewriteValve` supports a `RewriteMap` directive (similar to Apache mod_rewrite), allowing you to load an external text file for lookups (such as a blocked IP list):
+#### Configuration Example
 
-1. Add the `RewriteValve` to your `<Host>` or `<Context>` in `$CATALINA_HOME/conf/server.xml`:
-   ```xml
-   <Host name="localhost"  appBase="webapps" unpackWARs="true" autoDeploy="true">
-       <Valve className="org.apache.catalina.valves.rewrite.RewriteValve" />
-   </Host>
-   ```
+Add the `FilteringValve` to your `<Host>`, `<Context>`, or `<Engine>` block in `$CATALINA_HOME/conf/server.xml`:
 
-2. Create your block list file (e.g., `$CATALINA_HOME/conf/blocked-ips.txt`) where each line maps an IP to a status value:
-   ```text
-   # /usr/local/tomcat/conf/blocked-ips.txt
-   192.168.1.100 BLOCKED
-   203.0.113.50 BLOCKED
-   ```
+```xml
+<Host name="localhost"  appBase="webapps" unpackWARs="true" autoDeploy="true">
+    <Valve className="org.fakebelieve.tomcat.FilteringValve"
+           blockedIpsFile="conf/blocked-ips.txt"
+           allowedIpsFile="conf/allowed-ips.txt"
+           errorCode="444"
+           remoteIpHeader="X-Forwarded-For" />
+</Host>
+```
 
-3. Configure the `RewriteMap` and rule in your `rewrite.config` file (placed under `$CATALINA_HOME/conf/Catalina/localhost/rewrite.config` or `WEB-INF/rewrite.config`):
-   ```text
-   # Define a text-based map pointing to the block-list file
-   RewriteMap blockedIPs txt:conf/blocked-ips.txt
+#### Supported Attributes
 
-   # Check if the X-Forwarded-For header exists in the blockedIPs map and return status 444
-   RewriteCond ${blockedIPs:%{HTTP:X-Forwarded-For}} !=""
-   RewriteRule ^.*$ - [R=444]
-   ```
-   *(Note: This allows you to maintain an external text file for Layer 7 requests similar to how socket-level filtering uses files).*
+- **`className`**: Must be set to `org.fakebelieve.tomcat.FilteringValve`.
+- **`blockedIpsFile`**: Path to the file containing blocked IP addresses or CIDR blocks (one per line). Automatically monitored and hot-reloaded for changes.
+- **`allowedIpsFile`** (or `allowedIpFile`): Path to the file containing allowed IP addresses or CIDR blocks. Connections matching these bypass the block list.
+- **`errorCode`**: HTTP status code to return when rejecting a request (defaults to `403` Forbidden; e.g., `444` or `404`).
+- **`remoteIpHeader`**: The HTTP header to inspect for client IPs (defaults to `X-Forwarded-For`). Supports comma-separated chains.
 
 ## Notes
 
