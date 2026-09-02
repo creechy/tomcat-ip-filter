@@ -41,15 +41,7 @@ public class FilteringValve extends ValveBase {
         ipFilter.setAllowedIpsFile(filePath);
     }
 
-    public void setAllowedIpFile(String filePath) {
-        ipFilter.setAllowedIpFile(filePath);
-    }
-
     public String getAllowedIpsFile() {
-        return ipFilter.getAllowedIpsFile();
-    }
-
-    public String getAllowedIpFile() {
         return ipFilter.getAllowedIpsFile();
     }
 

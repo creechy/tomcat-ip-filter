@@ -2,12 +2,12 @@
 
 `tomcat-ip-filter` is a simple, lightweight library providing IP address and CIDR block filtering for Apache Tomcat. It supports both **Layer 4 (Transport/Socket Level)** and **Layer 7 (Application/Valve Level)** filtering, allowing you to secure your Tomcat deployments regardless of your network topology and load balancer configuration.
 
-Both components share the same robust backend (`IpFilterSupport`), supporting:
-- Individual IP addresses (IPv4 and IPv6)
-- CIDR blocks (e.g., `192.168.1.0/24`, `2001:db8::/32`)
-- Comment lines starting with `#` and inline comments / extra whitespace stripping
+General functionality includes:
+- **Allow list / Block list support**: Configure IPs and ranges to always allow, and IPs and ranges to block.
 - **Automatic hot-reloading**: Configuration files are monitored and reloaded dynamically without requiring a Tomcat restart.
-- **Allow list / Block list support**: If an allow list is configured, matching IPs bypass the block list check. Non-allowed IPs are checked against the block list and rejected if matched.
+- **Individual IP addresses**: Lists can contain both IPv4 and IPv6 exact IP addresses.
+- **CIDR blocks**: Lists can also contain CIDR blocks (e.g., `192.168.1.0/24`, `2001:db8::/32`).
+- **Comment lines**: Lines starting with `#` and inline comments / extra whitespace stripping.
 
 ---
 
@@ -40,7 +40,7 @@ Or run the Gradle task if configured:
 
 ## Choosing Your Filtering Approach
 
-Depending on your network architecture, choose the appropriate filter:
+Depending on your network architecture, choose the appropriate filter, or both:
 
 | Feature | Layer 4 (`FilteringNioEndpoint`) | Layer 7 (`FilteringValve`) |
 | :--- | :--- | :--- |
@@ -68,6 +68,12 @@ Edit `$CATALINA_HOME/conf/server.xml` and configure your Connector to use `org.f
            redirectPort="8443" />
 ```
 
+#### Supported `FilteringNioEndpoint` Attributes:
+- **`protocol`**: Must be set to `org.fakebelieve.tomcat.FilteringHttp11NioProtocol`.
+- **`blockedIpsFile`**: Path to the file containing blocked IP addresses or CIDR blocks (one per line). Automatically monitored and hot-reloaded.
+- **`allowedIpsFile`**: Path to the allowed IPs file. Connections matching these bypass the block list.
+
+
 ### Option B: Layer 7 Filtering (`FilteringValve`)
 
 Use this when Tomcat is behind a Layer 7 reverse proxy, API gateway, or load balancer (such as Nginx, HAProxy, or AWS ALB) that terminates TLS/HTTP and forwards traffic.
@@ -93,7 +99,7 @@ Add the `FilteringValve` to your `<Host>`, `<Context>`, or `<Engine>` block in `
 #### Supported `FilteringValve` Attributes:
 - **`className`**: Must be set to `org.fakebelieve.tomcat.FilteringValve`.
 - **`blockedIpsFile`**: Path to the file containing blocked IP addresses or CIDR blocks (one per line). Automatically monitored and hot-reloaded.
-- **`allowedIpsFile`** (or `allowedIpFile`): Path to the allowed IPs file. Connections matching these bypass the block list.
+- **`allowedIpsFile`**: Path to the allowed IPs file. Connections matching these bypass the block list.
 - **`errorCode`**: HTTP status code to return when rejecting a request (defaults to `403` Forbidden; e.g., `444` or `404`).
 
 ---

@@ -35,16 +35,8 @@ public class FilteringNioEndpoint extends NioEndpoint {
         ipFilter.setAllowedIpsFile(filePath);
     }
 
-    public void setAllowedIpFile(String filePath) {
-        ipFilter.setAllowedIpFile(filePath);
-    }
-
     public String getAllowedIpsFile() {
         return ipFilter.getAllowedIpsFile();
-    }
-
-    public String getAllowedIpFile() {
-        return ipFilter.getAllowedIpFile();
     }
 
     @Override
