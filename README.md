@@ -71,7 +71,7 @@ Edit `$CATALINA_HOME/conf/server.xml` and configure your Connector to use `org.f
 #### Supported `FilteringNioEndpoint` Attributes:
 - **`protocol`**: Must be set to `org.fakebelieve.tomcat.FilteringHttp11NioProtocol`.
 - **`blockedIpsFile`**: Path to the file containing blocked IP addresses or CIDR blocks (one per line). Automatically monitored and hot-reloaded.
-- **`allowedIpsFile`** (or `allowedIpFile`): Path to the allowed IPs file. Connections matching these bypass the block list.
+- **`allowedIpsFile`**: Path to the allowed IPs file. Connections matching these bypass the block list.
 
 
 ### Option B: Layer 7 Filtering (`FilteringValve`)
@@ -99,7 +99,7 @@ Add the `FilteringValve` to your `<Host>`, `<Context>`, or `<Engine>` block in `
 #### Supported `FilteringValve` Attributes:
 - **`className`**: Must be set to `org.fakebelieve.tomcat.FilteringValve`.
 - **`blockedIpsFile`**: Path to the file containing blocked IP addresses or CIDR blocks (one per line). Automatically monitored and hot-reloaded.
-- **`allowedIpsFile`** (or `allowedIpFile`): Path to the allowed IPs file. Connections matching these bypass the block list.
+- **`allowedIpsFile`**: Path to the allowed IPs file. Connections matching these bypass the block list.
 - **`errorCode`**: HTTP status code to return when rejecting a request (defaults to `403` Forbidden; e.g., `444` or `404`).
 
 ---

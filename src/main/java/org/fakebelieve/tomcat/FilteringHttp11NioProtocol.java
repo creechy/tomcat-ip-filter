@@ -52,29 +52,11 @@ public class FilteringHttp11NioProtocol extends Http11NioProtocol {
     }
 
     /**
-     * Alias for setAllowedIpsFile.
-     *
-     * @param filePath path to the allowed IPs file
-     */
-    public void setAllowedIpFile(String filePath) {
-        ((FilteringNioEndpoint) getEndpoint()).setAllowedIpFile(filePath);
-    }
-
-    /**
      * Gets the configured path to the allowed IPs file.
      *
      * @return the file path string
      */
     public String getAllowedIpsFile() {
         return ((FilteringNioEndpoint) getEndpoint()).getAllowedIpsFile();
-    }
-
-    /**
-     * Alias for getAllowedIpsFile.
-     *
-     * @return the file path string
-     */
-    public String getAllowedIpFile() {
-        return ((FilteringNioEndpoint) getEndpoint()).getAllowedIpFile();
     }
 }
