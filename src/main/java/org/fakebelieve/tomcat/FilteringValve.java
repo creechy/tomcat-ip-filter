@@ -1,11 +1,13 @@
 package org.fakebelieve.tomcat;
 
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletResponse;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import org.apache.catalina.connector.Request;
 import org.apache.catalina.connector.Response;
 import org.apache.catalina.valves.ValveBase;
+import org.apache.juli.logging.Log;
+import org.apache.juli.logging.LogFactory;
 
 /**
  * Tomcat Valve that filters requests based on blocked IPs/CIDRs and allowed IPs/CIDRs
@@ -14,7 +16,9 @@ import org.apache.catalina.valves.ValveBase;
  */
 public class FilteringValve extends ValveBase {
 
-    private final IpFilterSupport ipFilter = new IpFilterSupport(() -> containerLog);
+    private static final Log log = LogFactory.getLog(FilteringValve.class);
+
+    private final IpFilterSupport ipFilter = new IpFilterSupport(() -> log);
     private int errorCode = HttpServletResponse.SC_FORBIDDEN; // Default to 403 Forbidden
 
     public boolean isBlocked(String ip) {
@@ -57,6 +61,11 @@ public class FilteringValve extends ValveBase {
         return errorCode;
     }
 
+    public FilteringValve() {
+        super();
+        log.info("*** INSTANTIATING FilteringValve ***");
+    }
+
     @Override
     public void invoke(Request request, Response response) throws IOException, ServletException {
         // Periodically check if the blocked or allowed IPs files have been modified
@@ -69,16 +78,14 @@ public class FilteringValve extends ValveBase {
 
             // If an allow list is configured, check if the IP is allowed
             if (isAllowed(ip)) {
-                if (containerLog.isDebugEnabled()) {
-                    containerLog.debug("Allowed request from IP: " + ip);
-                }
+		log.info("Allowed request from IP: " + ip);
                 getNext().invoke(request, response);
                 return;
             }
 
             // Check if the IP is blocked
             if (isBlocked(ip)) {
-                containerLog.info("Rejected request due to blocked IP: " + ip + " with error code: " + errorCode);
+                log.info("Rejected request due to blocked IP: " + ip + " with error code: " + errorCode);
                 try {
                     response.sendError(errorCode);
                 } catch (Exception e) {
@@ -91,7 +98,9 @@ public class FilteringValve extends ValveBase {
                 }
                 return;
             }
-        }
+
+	    log.info("Passing through request from IP: " + ip);
+	}
 
         // Pass through if neither explicitly allowed nor blocked
         getNext().invoke(request, response);
