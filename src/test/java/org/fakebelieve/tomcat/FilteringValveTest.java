@@ -37,14 +37,5 @@ public class FilteringValveTest {
 
         assertTrue(valve.isAllowed("192.168.100.50"));
         assertFalse(valve.isAllowed("192.168.100.10"));
-        assertEquals("X-Forwarded-For", valve.getRemoteIpHeader());
-    }
-
-    @Test
-    public void testRemoteIpHeaderConfiguration() {
-        FilteringValve valve = new FilteringValve();
-        assertEquals("X-Forwarded-For", valve.getRemoteIpHeader());
-        valve.setRemoteIpHeader("CF-Connecting-IP");
-        assertEquals("CF-Connecting-IP", valve.getRemoteIpHeader());
     }
 }

@@ -1,8 +1,15 @@
 # tomcat-ip-filter
 
-A minimal Gradle project that builds a custom Tomcat NIO endpoint
-(`FilteringNioEndpoint`) which rejects connections from blocked IPs/CIDRs (with an optional allow list to bypass block-list checks) at
-`accept()` time — before TLS handshake or HTTP parsing.
+`tomcat-ip-filter` is a lightweight, high-performance library providing IP address and CIDR block filtering for Apache Tomcat. It supports both **Layer 4 (Transport/Socket Level)** and **Layer 7 (Application/Valve Level)** filtering, allowing you to secure your Tomcat deployments regardless of your network topology and load balancer configuration.
+
+Both components share the same robust backend (`IpFilterSupport`), supporting:
+- Individual IP addresses (IPv4 and IPv6)
+- CIDR blocks (e.g., `192.168.1.0/24`, `2001:db8::/32`)
+- Comment lines starting with `#` and inline comments / extra whitespace stripping
+- **Automatic hot-reloading**: Configuration files are monitored and reloaded dynamically without requiring a Tomcat restart.
+- **Allow list / Block list support**: If an allow list is configured, matching IPs bypass the block list check. Non-allowed IPs are checked against the block list and rejected if matched.
+
+---
 
 ## Build
 
@@ -10,43 +17,47 @@ A minimal Gradle project that builds a custom Tomcat NIO endpoint
 ./gradlew build      # or gradlew.bat build on Windows
 ```
 
-The Gradle wrapper is included, so you don't need Gradle installed
-locally — the first run will download Gradle 8.10.2 automatically.
+The Gradle wrapper is included, so you don't need Gradle installed locally — the first run will download Gradle automatically.
 
 This produces `build/libs/tomcat-ip-filter-1.0.0.jar`.
 
-Before building, check `build.gradle` and set `tomcatVersion` to match
-the Tomcat version you're deploying to (the Tomcat classes are only
-`compileOnly` — they are not bundled into the jar).
+> **Note:** Before building, check `build.gradle` and set `tomcatVersion` to match the Tomcat version you're deploying to. Tomcat classes are `compileOnly` dependencies and are not bundled into the jar.
 
 ## Install
 
-Copy the jar into Tomcat's own classpath (not a webapp's `WEB-INF/lib`,
-since this needs to load as part of connector bootstrap, before any
-webapp does):
+Copy the built jar into Tomcat's shared library classpath (`$CATALINA_HOME/lib/`):
 
 ```bash
 cp build/libs/tomcat-ip-filter-1.0.0.jar $CATALINA_HOME/lib/
 ```
 
-or:
-
+Or run the Gradle task if configured:
 ```bash
-cp build/libs/tomcat-ip-filter-1.0.0.jar $CATALINA_HOME/lib/
+./gradlew installToTomcat
 ```
 
-or:
+---
 
-```bash
-./gradlew installToTomcat   # uses $CATALINA_HOME/lib automatically
-```
+## Choosing Your Filtering Approach
 
-## Configure
+Depending on your network architecture, choose the appropriate filter:
 
-Edit `$CATALINA_HOME/conf/server.xml` and point your connector at the
-custom protocol class instead of the default `"HTTP/1.1"` alias — see
-`conf/connector-snippet.xml` for the exact attribute. You can also specify a
-`blockedIpsFile` and/or `allowedIpsFile` (or `allowedIpFile`) attribute to automatically load blocked or allowed IPs from files at startup:
+| Feature | Layer 4 (`FilteringNioEndpoint`) | Layer 7 (`FilteringValve`) |
+| :--- | :--- | :--- |
+| **Where it intercepts** | TCP socket accept (`accept()` time) | Catalina request pipeline (`Valve`) |
+| **TLS / HTTP Overhead** | None (rejected before handshake/parsing) | Processes request up to Valve execution |
+| **Source IP Source** | Direct TCP remote socket address | `request.getRemoteAddr()` (compatible with `RemoteIpValve`, etc.) |
+| **Best Used For** | Direct-to-edge deployments or Layer 4 Load Balancers (TCP passthrough) | Layer 7 Reverse Proxies, API Gateways, and ALBs (terminating TLS/HTTP) |
+
+---
+
+## Configuration
+
+### Option A: Layer 4 Filtering (`FilteringNioEndpoint`)
+
+Use this when Tomcat receives direct TCP connections from clients or via a Layer 4 network load balancer that preserves the client's source IP.
+
+Edit `$CATALINA_HOME/conf/server.xml` and configure your Connector to use `org.fakebelieve.tomcat.FilteringHttp11NioProtocol` (see `conf/connector-snippet.xml`):
 
 ```xml
 <Connector port="8080"
@@ -57,79 +68,64 @@ custom protocol class instead of the default `"HTTP/1.1"` alias — see
            redirectPort="8443" />
 ```
 
-The file can contain individual IP addresses (IPv4 or IPv6) or CIDR blocks (e.g., `192.168.1.0/24` or `2001:db8::/32`), one per line. Blank lines and comments starting with `#` are ignored (inline comments and extra whitespace are also stripped). 
+### Option B: Layer 7 Filtering (`FilteringValve`)
 
-If an allowed IPs file is configured, any connection from an IP present on the allow list or within an allowed CIDR block will be permitted immediately, bypassing the block list check. If an IP is not on the allow list, it is still checked against the block list and permitted unless explicitly blocked or matching a blocked CIDR block.
+Use this when Tomcat is behind a Layer 7 reverse proxy, API gateway, or load balancer (such as Nginx, HAProxy, or AWS ALB) that terminates TLS/HTTP and forwards traffic. 
 
-The IP/CIDR files are monitored for changes; if you modify the files while Tomcat is running, the changes will be automatically detected and reloaded without requiring a restart.
-
-## Fail2ban Integration
-
-You can integrate `tomcat-ip-filter` with [Fail2ban](https://github.com/fail2ban/fail2ban) to automatically block malicious IP addresses by updating your configured `blockedIpsFile` when Fail2ban bans or unbans an IP.
-
-Because `tomcat-ip-filter` dynamically monitors the block list file for changes, any updates made by Fail2ban take effect immediately without requiring a Tomcat restart.
-
-Below is an example custom Fail2ban action (typically placed in `/etc/fail2ban/action.d/tomcat-block.conf`) that manages the block list:
-
-```ini
-[Definition]
-
-# Executed when an IP is banned
-# Appends "IP_ADDRESS BLOCKED" to banned-ips.txt if not already present
-actionban = if ! grep -q "^<ip> " /usr/local/tomcat/conf/banned-ips.txt 2>/dev/null; then \
-                echo "<ip> BLOCKED" >> /usr/local/tomcat/conf/banned-ips.txt; \
-            fi
-
-# Executed when an IP is unbanned
-# Removes any line starting with the IP address from banned-ips.txt
-actionunban = sed -i '/^<ip> /d' /usr/local/tomcat/conf/banned-ips.txt
-
-# Executed when Fail2ban starts/reloads
-# Ensures the banned-ips.txt file exists and has correct permissions
-actionstart = touch /usr/local/tomcat/conf/banned-ips.txt && \
-              chown app:app /usr/local/tomcat/conf/banned-ips.txt 2>/dev/null || true
-
-# Executed when Fail2ban stops
-actionstop =
-```
-
-## Deployment Contexts and Load Balancers
-
-This filter rejects connections at the socket level (`accept()` time) based on the direct remote IP address of the incoming TCP connection. Therefore, **it is only useful when Tomcat is deployed directly on the edge or behind a Layer 4 (Network) Load Balancer** that preserves the client's source IP address. 
-
-If Tomcat is deployed behind a Layer 7 (Application) reverse proxy or load balancer (such as an Nginx reverse proxy, API gateway, or AWS ALB that terminates TLS/HTTP and forwards requests), Tomcat will only see the load balancer's or proxy's internal IP address, rendering IP-based filtering at this layer ineffective for the actual clients. 
-
-### Layer 7 Alternative (`FilteringValve`)
-
-For Layer 7 deployments (such as behind an Nginx reverse proxy, API gateway, or AWS ALB that terminates TLS/HTTP and forwards requests via headers like `X-Forwarded-For`), you can use the custom `FilteringValve` instead of socket-level filtering.
-
-The `FilteringValve` inspects headers (defaulting to `X-Forwarded-For`, supporting comma-separated chains of IPs) against your block and allow list files, and rejects unauthorized requests with a configurable HTTP error code.
-
-#### Configuration Example
+Combine this with Tomcat's standard `RemoteIpValve` so that `request.getRemoteAddr()` correctly reflects the original client IP forwarded via proxy headers (e.g., `X-Forwarded-For`).
 
 Add the `FilteringValve` to your `<Host>`, `<Context>`, or `<Engine>` block in `$CATALINA_HOME/conf/server.xml`:
 
 ```xml
 <Host name="localhost"  appBase="webapps" unpackWARs="true" autoDeploy="true">
+    
+    <!-- Optional: Restores client IP from proxy headers if applicable -->
+    <Valve className="org.apache.catalina.valves.RemoteIpValve" />
+
+    <!-- IP Filtering Valve -->
     <Valve className="org.fakebelieve.tomcat.FilteringValve"
            blockedIpsFile="conf/blocked-ips.txt"
            allowedIpsFile="conf/allowed-ips.txt"
-           errorCode="444"
-           remoteIpHeader="X-Forwarded-For" />
+           errorCode="444" />
 </Host>
 ```
 
-#### Supported Attributes
-
+#### Supported `FilteringValve` Attributes:
 - **`className`**: Must be set to `org.fakebelieve.tomcat.FilteringValve`.
-- **`blockedIpsFile`**: Path to the file containing blocked IP addresses or CIDR blocks (one per line). Automatically monitored and hot-reloaded for changes.
-- **`allowedIpsFile`** (or `allowedIpFile`): Path to the file containing allowed IP addresses or CIDR blocks. Connections matching these bypass the block list.
+- **`blockedIpsFile`**: Path to the file containing blocked IP addresses or CIDR blocks (one per line). Automatically monitored and hot-reloaded.
+- **`allowedIpsFile`** (or `allowedIpFile`): Path to the allowed IPs file. Connections matching these bypass the block list.
 - **`errorCode`**: HTTP status code to return when rejecting a request (defaults to `403` Forbidden; e.g., `444` or `404`).
-- **`remoteIpHeader`**: The HTTP header to inspect for client IPs (defaults to `X-Forwarded-For`). Supports comma-separated chains.
 
-## Notes
+---
 
-- Only tested against the NIO connector (`Http11NioProtocol` /
-  `NioEndpoint`). If APR/native is enabled on your server, this won't
-  be used unless you also point the connector explicitly at the NIO
-  protocol class (APR has its own `AprEndpoint`, not covered here).
+## Fail2ban Integration
+
+Both `FilteringNioEndpoint` and `FilteringValve` monitor their respective filter files dynamically. You can integrate `tomcat-ip-filter` with [Fail2ban](https://github.com/fail2ban/fail2ban) to automatically ban or unban malicious IP addresses at runtime without restarting Tomcat.
+
+Below is an example Fail2ban action configuration (typically placed in `/etc/fail2ban/action.d/tomcat-block.conf`):
+
+```ini
+[Definition]
+
+# Executed when an IP is banned
+actionban = if ! grep -q "^<ip> " /usr/local/tomcat/conf/blocked-ips.txt 2>/dev/null; then \
+                echo "<ip> BLOCKED" >> /usr/local/tomcat/conf/blocked-ips.txt; \
+            fi
+
+# Executed when an IP is unbanned
+actionunban = sed -i '/^<ip> /d' /usr/local/tomcat/conf/blocked-ips.txt
+
+# Executed when Fail2ban starts/reloads
+actionstart = touch /usr/local/tomcat/conf/blocked-ips.txt && \
+              chown app:app /usr/local/tomcat/conf/blocked-ips.txt 2>/dev/null || true
+
+# Executed when Fail2ban stops
+actionstop =
+```
+
+---
+
+## Notes & Compatibility
+
+- **Connector Support**: `FilteringNioEndpoint` is tested against the NIO connector (`Http11NioProtocol` / `NioEndpoint`). If APR/native connector is enabled, socket-level filtering is bypassed unless explicitly using the NIO protocol class.
+- **File Paths**: Relative paths for `blockedIpsFile` and `allowedIpsFile` are resolved relative to `$CATALINA_BASE`. Absolute paths are also fully supported.
