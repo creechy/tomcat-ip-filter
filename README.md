@@ -127,5 +127,6 @@ actionstop =
 
 ## Notes & Compatibility
 
+- **Tomcat Version**: This library is designed for and works with **Tomcat 9**.
 - **Connector Support**: `FilteringNioEndpoint` is tested against the NIO connector (`Http11NioProtocol` / `NioEndpoint`). If APR/native connector is enabled, socket-level filtering is bypassed unless explicitly using the NIO protocol class.
 - **File Paths**: Relative paths for `blockedIpsFile` and `allowedIpsFile` are resolved relative to `$CATALINA_BASE`. Absolute paths are also fully supported.
