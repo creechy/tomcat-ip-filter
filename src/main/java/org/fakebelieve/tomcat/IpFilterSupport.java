@@ -9,29 +9,43 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import org.apache.juli.logging.Log;
 
 /**
  * Shared support class for IP and CIDR block filtering and file management.
- * Used by both FilteringNioEndpoint and FilteringValve.
+ * Used by both FilteringNioEndpoint and FilteringValve, sharing parsed rules
+ * and file modification checks via a static cache keyed by absolute file path.
  */
 public class IpFilterSupport {
     private final Supplier<Log> logSupplier;
 
-    private volatile Set<String> blockedIps = Set.of();
-    private volatile List<CidrBlock> blockedCidrs = List.of();
-
-    private volatile Set<String> allowedIps = Set.of();
-    private volatile List<CidrBlock> allowedCidrs = List.of();
-
     private String blockedIpsFile;
     private String allowedIpsFile;
 
-    private long blockedFileLastModified = 0L;
-    private long allowedFileLastModified = 0L;
-    private long lastCheckedTime = 0L;
     private static final long CHECK_INTERVAL_MS = 5000; // Throttle check to every 5 seconds
+
+    private static class SharedRuleSet {
+        private volatile Set<String> exactIps = Set.of();
+        private volatile List<CidrBlock> cidrBlocks = List.of();
+        private volatile long lastModified = -1L;
+        private volatile long lastCheckedTime = 0L;
+
+        public boolean matches(String ip) {
+            if (exactIps.contains(ip)) {
+                return true;
+            }
+            for (CidrBlock block : cidrBlocks) {
+                if (block.matches(ip)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    private static final ConcurrentHashMap<String, SharedRuleSet> RULE_CACHE = new ConcurrentHashMap<>();
 
     public IpFilterSupport(Supplier<Log> logSupplier) {
         this.logSupplier = logSupplier;
@@ -49,35 +63,22 @@ public class IpFilterSupport {
         if (ip == null) {
             return false;
         }
-        if (blockedIps.contains(ip)) {
-            return true;
-        }
-        for (CidrBlock block : blockedCidrs) {
-            if (block.matches(ip)) {
-                return true;
-            }
-        }
-        return false;
+        checkAndReloadFiles();
+        SharedRuleSet ruleSet = getCachedRuleSet(blockedIpsFile);
+        return ruleSet != null && ruleSet.matches(ip);
     }
 
     public boolean isAllowed(String ip) {
         if (ip == null) {
             return false;
         }
-        if (allowedIps.contains(ip)) {
-            return true;
-        }
-        for (CidrBlock block : allowedCidrs) {
-            if (block.matches(ip)) {
-                return true;
-            }
-        }
-        return false;
+        checkAndReloadFiles();
+        SharedRuleSet ruleSet = getCachedRuleSet(allowedIpsFile);
+        return ruleSet != null && ruleSet.matches(ip);
     }
 
     public void setBlockedIpsFile(String filePath) {
         this.blockedIpsFile = filePath;
-        this.blockedFileLastModified = 0L;
         loadBlockedIpsFromFile(filePath);
     }
 
@@ -87,7 +88,6 @@ public class IpFilterSupport {
 
     public void setAllowedIpsFile(String filePath) {
         this.allowedIpsFile = filePath;
-        this.allowedFileLastModified = 0L;
         loadAllowedIpsFromFile(filePath);
     }
 
@@ -115,6 +115,19 @@ public class IpFilterSupport {
             }
         }
         return file;
+    }
+
+    private String getFileCacheKey(String filePath) {
+        File file = resolveFile(filePath);
+        return file != null ? file.getAbsolutePath() : null;
+    }
+
+    private SharedRuleSet getCachedRuleSet(String filePath) {
+        String key = getFileCacheKey(filePath);
+        if (key == null) {
+            return null;
+        }
+        return RULE_CACHE.get(key);
     }
 
     public static class IpLoadResult {
@@ -202,112 +215,109 @@ public class IpFilterSupport {
         }
     }
 
-    public synchronized void loadBlockedIpsFromFile(String filePath) {
-        this.blockedIpsFile = filePath;
+    private void loadIpsForFile(String filePath, boolean isBlocked) {
         File file = resolveFile(filePath);
         if (file == null) {
             return;
         }
 
-        Log l = getLog();
-        if (l != null) {
-            l.info("Loading blocked addresses from file: " + file.getAbsolutePath());
-        }
+        String key = file.getAbsolutePath();
+        SharedRuleSet ruleSet = RULE_CACHE.computeIfAbsent(key, k -> new SharedRuleSet());
 
-        if (!file.exists() || !file.isFile()) {
-            if (l != null) {
-                l.warn("Blocked IPs file not found or not a valid file: " + file.getAbsolutePath());
+        synchronized (ruleSet) {
+            Log l = getLog();
+
+            if (!file.exists() || !file.isFile()) {
+                if (l != null) {
+                    l.warn((isBlocked ? "Blocked" : "Allowed") + " IPs file not found or not a valid file: "
+                            + file.getAbsolutePath());
+                }
+                ruleSet.exactIps = Set.of();
+                ruleSet.cidrBlocks = List.of();
+                ruleSet.lastModified = 0L;
+                return;
             }
-            return;
-        }
 
-        this.blockedFileLastModified = file.lastModified();
-        IpLoadResult loaded = loadIpsFromFile(filePath);
-        if (loaded != null) {
-            this.blockedIps = loaded.exactIps;
-            this.blockedCidrs = loaded.cidrBlocks;
+            long currentModified = file.lastModified();
+
+            if (ruleSet.lastModified == currentModified) {
+                if (l != null) {
+                    l.info((isBlocked ? "Blocked" : "Allowed") + " addresses already loaded from "
+                            + file.getAbsolutePath() + ", skipping redundant load.");
+                }
+                return;
+            }
+
             if (l != null) {
-                l.info("Successfully loaded and replaced blocked addresses: " + loaded.exactIps.size()
-                        + " exact IP(s), " + loaded.cidrBlocks.size() + " CIDR block(s) from "
+                l.info("Loading " + (isBlocked ? "blocked" : "allowed") + " addresses from file: "
                         + file.getAbsolutePath());
+            }
+
+            ruleSet.lastModified = currentModified;
+            IpLoadResult loaded = loadIpsFromFile(filePath);
+            if (loaded != null) {
+                ruleSet.exactIps = loaded.exactIps;
+                ruleSet.cidrBlocks = loaded.cidrBlocks;
+                if (l != null) {
+                    l.info("Successfully loaded and replaced " + (isBlocked ? "blocked" : "allowed") + " addresses: "
+                            + loaded.exactIps.size()
+                            + " exact IP(s), " + loaded.cidrBlocks.size() + " CIDR block(s) from "
+                            + file.getAbsolutePath());
+                }
             }
         }
     }
 
-    public synchronized void loadAllowedIpsFromFile(String filePath) {
+    public void loadBlockedIpsFromFile(String filePath) {
+        this.blockedIpsFile = filePath;
+        loadIpsForFile(filePath, true);
+    }
+
+    public void loadAllowedIpsFromFile(String filePath) {
         this.allowedIpsFile = filePath;
-        File file = resolveFile(filePath);
-        if (file == null) {
-            return;
-        }
-
-        Log l = getLog();
-        if (l != null) {
-            l.info("Loading allowed addresses from file: " + file.getAbsolutePath());
-        }
-
-        if (!file.exists() || !file.isFile()) {
-            if (l != null) {
-                l.warn("Allowed IPs file not found or not a valid file: " + file.getAbsolutePath());
-            }
-            this.allowedIps = Set.of();
-            this.allowedCidrs = List.of();
-            return;
-        }
-
-        this.allowedFileLastModified = file.lastModified();
-        IpLoadResult loaded = loadIpsFromFile(filePath);
-        if (loaded != null) {
-            this.allowedIps = loaded.exactIps;
-            this.allowedCidrs = loaded.cidrBlocks;
-            if (l != null) {
-                l.info("Successfully loaded and replaced allowed addresses: " + loaded.exactIps.size()
-                        + " exact IP(s), " + loaded.cidrBlocks.size() + " CIDR block(s) from "
-                        + file.getAbsolutePath());
-            }
-        }
+        loadIpsForFile(filePath, false);
     }
 
     public void checkAndReloadFiles() {
-        long now = System.currentTimeMillis();
-        // Quick unsynchronized check to avoid lock contention on every request/connection
-        if (now - lastCheckedTime < CHECK_INTERVAL_MS) {
+        checkAndReloadFile(blockedIpsFile, true);
+        checkAndReloadFile(allowedIpsFile, false);
+    }
+
+    private void checkAndReloadFile(String filePath, boolean isBlockedFile) {
+        if (filePath == null || filePath.trim().isEmpty()) {
+            return;
+        }
+        File file = resolveFile(filePath);
+        if (file == null || !file.exists() || !file.isFile()) {
             return;
         }
 
-        synchronized (this) {
-            // Re-check interval inside synchronization block
+        String key = file.getAbsolutePath();
+        SharedRuleSet ruleSet = RULE_CACHE.computeIfAbsent(key, k -> new SharedRuleSet());
+
+        long now = System.currentTimeMillis();
+        if (now - ruleSet.lastCheckedTime < CHECK_INTERVAL_MS) {
+            return;
+        }
+
+        synchronized (ruleSet) {
             long currentNow = System.currentTimeMillis();
-            if (currentNow - lastCheckedTime < CHECK_INTERVAL_MS) {
+            if (currentNow - ruleSet.lastCheckedTime < CHECK_INTERVAL_MS) {
                 return;
             }
-            lastCheckedTime = currentNow;
+            ruleSet.lastCheckedTime = currentNow;
 
-            if (blockedIpsFile != null && !blockedIpsFile.trim().isEmpty()) {
-                File file = resolveFile(blockedIpsFile);
-                if (file != null && file.exists() && file.isFile()) {
-                    long currentModified = file.lastModified();
-                    if (currentModified > blockedFileLastModified) {
-                        Log l = getLog();
-                        if (l != null) {
-                            l.info("Blocked IPs file has changed. Reloading from: " + file.getAbsolutePath());
-                        }
-                        loadBlockedIpsFromFile(blockedIpsFile);
-                    }
+            long currentModified = file.lastModified();
+            if (currentModified > ruleSet.lastModified) {
+                Log l = getLog();
+                if (l != null) {
+                    l.info((isBlockedFile ? "Blocked" : "Allowed") + " IPs file has changed. Reloading from: "
+                            + file.getAbsolutePath());
                 }
-            }
-
-            if (allowedIpsFile != null && !allowedIpsFile.trim().isEmpty()) {
-                File file = resolveFile(allowedIpsFile);
-                if (file != null && file.exists() && file.isFile()) {
-                    long currentModified = file.lastModified();
-                    if (currentModified > allowedFileLastModified) {
-                        Log l = getLog();
-                        if (l != null) {
-                            l.info("Allowed IPs file has changed. Reloading from: " + file.getAbsolutePath());
-                        }
-                        loadAllowedIpsFromFile(allowedIpsFile);
-                    }
+                if (isBlockedFile) {
+                    loadBlockedIpsFromFile(filePath);
+                } else {
+                    loadAllowedIpsFromFile(filePath);
                 }
             }
         }
