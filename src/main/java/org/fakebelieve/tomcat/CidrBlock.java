@@ -35,7 +35,8 @@ public class CidrBlock {
             this.bitLength = addrBytes.length * 8;
 
             if (prefix < 0 || prefix > this.bitLength) {
-                throw new IllegalArgumentException("Invalid prefix length " + prefix + " for " + bitLength + "-bit address.");
+                throw new IllegalArgumentException(
+                        "Invalid prefix length " + prefix + " for " + bitLength + "-bit address.");
             }
             this.prefixLength = prefix;
 
@@ -43,7 +44,8 @@ public class CidrBlock {
             if (this.prefixLength == 0) {
                 this.netmask = BigInteger.ZERO;
             } else {
-                this.netmask = BigInteger.ONE.shiftLeft(this.prefixLength)
+                this.netmask = BigInteger.ONE
+                        .shiftLeft(this.prefixLength)
                         .subtract(BigInteger.ONE)
                         .shiftLeft(this.bitLength - this.prefixLength);
             }

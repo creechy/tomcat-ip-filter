@@ -1,8 +1,7 @@
 package org.fakebelieve.tomcat;
 
-import java.nio.channels.SocketChannel;
 import java.net.InetSocketAddress;
-
+import java.nio.channels.SocketChannel;
 import org.apache.tomcat.util.net.NioEndpoint;
 
 /**

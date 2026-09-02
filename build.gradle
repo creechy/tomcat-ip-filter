@@ -1,5 +1,6 @@
 plugins {
     id 'java-library'
+    id 'com.diffplug.spotless' version '6.25.0'
 }
 
 group = 'org.fakebelieve.tomcat'
@@ -48,4 +49,17 @@ tasks.register('installToTomcat', Copy) {
     from jar.archiveFile
     into providers.environmentVariable('CATALINA_HOME').map { "$it/lib" }
         .getOrElse('/opt/tomcat/lib')
+}
+
+spotless {
+    format 'misc', {
+        target '*.gradle', '*.md', '.gitignore'
+        trimTrailingWhitespace()
+        indentWithSpaces(2)
+        endWithNewline()
+    }
+    java {
+        target "src/**/*.java"
+        palantirJavaFormat()
+    }
 }
