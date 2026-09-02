@@ -18,7 +18,7 @@ public class FilteringValve extends ValveBase {
 
     private static final Log log = LogFactory.getLog(FilteringValve.class);
 
-    private final IpFilterSupport ipFilter = new IpFilterSupport(() -> log);
+    private final IpFilterSupport ipFilter = new IpFilterSupport(log);
     private int errorCode = HttpServletResponse.SC_FORBIDDEN; // Default to 403 Forbidden
 
     public boolean isBlocked(String ip) {

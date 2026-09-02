@@ -19,7 +19,7 @@ import org.apache.juli.logging.Log;
  * and file modification checks via a static cache keyed by absolute file path.
  */
 public class IpFilterSupport {
-    private final Supplier<Log> logSupplier;
+    private final Log log;
 
     private String blockedIpsFile;
     private String allowedIpsFile;
@@ -47,16 +47,8 @@ public class IpFilterSupport {
 
     private static final ConcurrentHashMap<String, SharedRuleSet> RULE_CACHE = new ConcurrentHashMap<>();
 
-    public IpFilterSupport(Supplier<Log> logSupplier) {
-        this.logSupplier = logSupplier;
-    }
-
     public IpFilterSupport(Log staticLog) {
-        this.logSupplier = () -> staticLog;
-    }
-
-    private Log getLog() {
-        return logSupplier != null ? logSupplier.get() : null;
+        this.log = staticLog;
     }
 
     public boolean isBlocked(String ip) {
@@ -197,9 +189,7 @@ public class IpFilterSupport {
                             }
                         }
                     } catch (Exception e) {
-                        Log l = getLog();
-                        if (l != null) {
-                            l.warn("Invalid IP or CIDR entry ignored: '" + line + "' in file "
+                        log.warn("Invalid IP or CIDR entry ignored: '" + line + "' in file "
                                     + file.getAbsolutePath());
                         }
                     }
@@ -207,9 +197,7 @@ public class IpFilterSupport {
             }
             return new IpLoadResult(Set.copyOf(tempExact), List.copyOf(tempCidr));
         } catch (IOException e) {
-            Log l = getLog();
-            if (l != null) {
-                l.error("Failed to read IPs file: " + file.getAbsolutePath(), e);
+            log.error("Failed to read IPs file: " + file.getAbsolutePath(), e);
             }
             return null;
         }
@@ -225,8 +213,6 @@ public class IpFilterSupport {
         SharedRuleSet ruleSet = RULE_CACHE.computeIfAbsent(key, k -> new SharedRuleSet());
 
         synchronized (ruleSet) {
-            Log l = getLog();
-
             if (!file.exists() || !file.isFile()) {
                 if (l != null) {
                     l.warn((isBlocked ? "Blocked" : "Allowed") + " IPs file not found or not a valid file: "
@@ -309,9 +295,7 @@ public class IpFilterSupport {
 
             long currentModified = file.lastModified();
             if (currentModified > ruleSet.lastModified) {
-                Log l = getLog();
-                if (l != null) {
-                    l.info((isBlockedFile ? "Blocked" : "Allowed") + " IPs file has changed. Reloading from: "
+                log.info((isBlockedFile ? "Blocked" : "Allowed") + " IPs file has changed. Reloading from: "
                             + file.getAbsolutePath());
                 }
                 if (isBlockedFile) {
