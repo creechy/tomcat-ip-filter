@@ -9,6 +9,8 @@ General functionality includes:
 - **CIDR blocks**: Lists can also contain CIDR blocks (e.g., `192.168.1.0/24`, `2001:db8::/32`).
 - **Comment lines**: Lines starting with `#` and inline comments / extra whitespace stripping.
 
+> **Note:** Tomcat has some similar built-in valves (`RemoteAddrValve`, `RemoteCIDRValve`, `RemoteHostValve`) but they do not support dynamic reloading. 
+
 ---
 
 ## Build
