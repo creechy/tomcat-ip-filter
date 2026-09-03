@@ -10,7 +10,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
 import org.apache.juli.logging.Log;
 
 /**
@@ -189,16 +188,13 @@ public class IpFilterSupport {
                             }
                         }
                     } catch (Exception e) {
-                        log.warn("Invalid IP or CIDR entry ignored: '" + line + "' in file "
-                                    + file.getAbsolutePath());
-                        }
+                        log.warn("Invalid IP or CIDR entry ignored: '" + line + "' in file " + file.getAbsolutePath());
                     }
                 }
             }
             return new IpLoadResult(Set.copyOf(tempExact), List.copyOf(tempCidr));
         } catch (IOException e) {
             log.error("Failed to read IPs file: " + file.getAbsolutePath(), e);
-            }
             return null;
         }
     }
@@ -214,10 +210,9 @@ public class IpFilterSupport {
 
         synchronized (ruleSet) {
             if (!file.exists() || !file.isFile()) {
-                if (l != null) {
-                    l.warn((isBlocked ? "Blocked" : "Allowed") + " IPs file not found or not a valid file: "
-                            + file.getAbsolutePath());
-                }
+                log.warn((isBlocked ? "Blocked" : "Allowed") + " IPs file not found or not a valid file: "
+                        + file.getAbsolutePath());
+
                 ruleSet.exactIps = Set.of();
                 ruleSet.cidrBlocks = List.of();
                 ruleSet.lastModified = 0L;
@@ -227,29 +222,24 @@ public class IpFilterSupport {
             long currentModified = file.lastModified();
 
             if (ruleSet.lastModified == currentModified) {
-                if (l != null) {
-                    l.info((isBlocked ? "Blocked" : "Allowed") + " addresses already loaded from "
-                            + file.getAbsolutePath() + ", skipping redundant load.");
-                }
+                log.info((isBlocked ? "Blocked" : "Allowed") + " addresses already loaded from "
+                        + file.getAbsolutePath() + ", skipping redundant load.");
+
                 return;
             }
 
-            if (l != null) {
-                l.info("Loading " + (isBlocked ? "blocked" : "allowed") + " addresses from file: "
-                        + file.getAbsolutePath());
-            }
+            log.info("Loading " + (isBlocked ? "blocked" : "allowed") + " addresses from file: "
+                    + file.getAbsolutePath());
 
             ruleSet.lastModified = currentModified;
             IpLoadResult loaded = loadIpsFromFile(filePath);
             if (loaded != null) {
                 ruleSet.exactIps = loaded.exactIps;
                 ruleSet.cidrBlocks = loaded.cidrBlocks;
-                if (l != null) {
-                    l.info("Successfully loaded and replaced " + (isBlocked ? "blocked" : "allowed") + " addresses: "
-                            + loaded.exactIps.size()
-                            + " exact IP(s), " + loaded.cidrBlocks.size() + " CIDR block(s) from "
-                            + file.getAbsolutePath());
-                }
+                log.info("Successfully loaded and replaced " + (isBlocked ? "blocked" : "allowed") + " addresses: "
+                        + loaded.exactIps.size()
+                        + " exact IP(s), " + loaded.cidrBlocks.size() + " CIDR block(s) from "
+                        + file.getAbsolutePath());
             }
         }
     }
@@ -296,8 +286,7 @@ public class IpFilterSupport {
             long currentModified = file.lastModified();
             if (currentModified > ruleSet.lastModified) {
                 log.info((isBlockedFile ? "Blocked" : "Allowed") + " IPs file has changed. Reloading from: "
-                            + file.getAbsolutePath());
-                }
+                        + file.getAbsolutePath());
                 if (isBlockedFile) {
                     loadBlockedIpsFromFile(filePath);
                 } else {

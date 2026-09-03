@@ -13,7 +13,7 @@ import org.apache.tomcat.util.net.NioEndpoint;
  */
 public class FilteringNioEndpoint extends NioEndpoint {
 
-    private final IpFilterSupport ipFilter = new IpFilterSupport(this::getLog);
+    private final IpFilterSupport ipFilter = new IpFilterSupport(this.getLog());
 
     public boolean isBlocked(String ip) {
         return ipFilter.isBlocked(ip);
