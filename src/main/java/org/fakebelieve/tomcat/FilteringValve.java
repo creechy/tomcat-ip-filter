@@ -18,7 +18,7 @@ public class FilteringValve extends ValveBase {
 
     private static final Log log = LogFactory.getLog(FilteringValve.class);
 
-    private final IpFilterSupport ipFilter = new IpFilterSupport(() -> log);
+    private final IpFilterSupport ipFilter = new IpFilterSupport(log);
     private int errorCode = HttpServletResponse.SC_FORBIDDEN; // Default to 403 Forbidden
 
     public boolean isBlocked(String ip) {
@@ -70,14 +70,14 @@ public class FilteringValve extends ValveBase {
 
             // If an allow list is configured, check if the IP is allowed
             if (isAllowed(ip)) {
-                log.info("Allowed request from IP: " + ip);
+                log.info("Accepted request from allowed IP: " + ip);
                 getNext().invoke(request, response);
                 return;
             }
 
             // Check if the IP is blocked
             if (isBlocked(ip)) {
-                log.info("Rejected request due to blocked IP: " + ip + " with error code: " + errorCode);
+                log.info("Rejected request from blocked IP: " + ip + " with error code: " + errorCode);
                 try {
                     response.sendError(errorCode);
                 } catch (Exception e) {
@@ -91,7 +91,7 @@ public class FilteringValve extends ValveBase {
                 return;
             }
 
-            log.info("Passing through request from IP: " + ip);
+            log.info("Passed through request from IP: " + ip);
         }
 
         // Pass through if neither explicitly allowed nor blocked
