@@ -2,7 +2,7 @@ package org.fakebelieve.tomcat;
 
 import java.util.concurrent.ConcurrentHashMap;
 
-public class RuleSetCache {
+class RuleSetCache {
 
     private static final ConcurrentHashMap<String, SharedRuleSet> RULE_CACHE = new ConcurrentHashMap<>();
 

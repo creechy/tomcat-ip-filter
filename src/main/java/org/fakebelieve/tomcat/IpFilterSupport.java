@@ -120,15 +120,7 @@ public class IpFilterSupport {
         return RuleSetCache.get(key);
     }
 
-    public static class IpLoadResult {
-        public final Set<String> exactIps;
-        public final List<CidrBlock> cidrBlocks;
-
-        public IpLoadResult(Set<String> exactIps, List<CidrBlock> cidrBlocks) {
-            this.exactIps = exactIps;
-            this.cidrBlocks = cidrBlocks;
-        }
-    }
+    public record IpLoadResult(Set<String> exactIps, List<CidrBlock> cidrBlocks) {}
 
     public IpLoadResult loadIpsFromFile(String filePath) {
         File file = resolveFile(filePath);
