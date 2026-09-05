@@ -63,11 +63,11 @@ Edit `$CATALINA_HOME/conf/server.xml` and configure your Connector to use `org.f
 
 ```xml
 <Connector port="8080"
-           protocol="org.fakebelieve.tomcat.FilteringHttp11NioProtocol"
-           blockedIpsFile="conf/blocked-ips.txt"
-           allowedIpsFile="conf/allowed-ips.txt"
-           connectionTimeout="20000"
-           redirectPort="8443" />
+          protocol="org.fakebelieve.tomcat.FilteringHttp11NioProtocol"
+          blockedIpsFile="conf/blocked-ips.txt"
+          allowedIpsFile="conf/allowed-ips.txt"
+          connectionTimeout="20000"
+          redirectPort="8443" />
 ```
 
 #### Supported `FilteringNioEndpoint` Attributes:
@@ -92,9 +92,9 @@ Add the `FilteringValve` to your `<Host>`, `<Context>`, or `<Engine>` block in `
 
     <!-- IP Filtering Valve -->
     <Valve className="org.fakebelieve.tomcat.FilteringValve"
-           blockedIpsFile="conf/blocked-ips.txt"
-           allowedIpsFile="conf/allowed-ips.txt"
-           errorCode="444" />
+          blockedIpsFile="conf/blocked-ips.txt"
+          allowedIpsFile="conf/allowed-ips.txt"
+          errorCode="444" />
 </Host>
 ```
 
