@@ -62,15 +62,7 @@ public class IpFilterSupport {
         loadIpsForFile(filePath, RuleSetType.ALLOWED);
     }
 
-    public void setAllowedIpFile(String filePath) {
-        setAllowedIpsFile(filePath);
-    }
-
     public String getAllowedIpsFile() {
-        return allowedIpsFile;
-    }
-
-    public String getAllowedIpFile() {
         return allowedIpsFile;
     }
 
