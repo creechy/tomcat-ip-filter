@@ -16,7 +16,7 @@ repositories {
 }
 
 // Match this to the Tomcat version you're actually deploying to.
-def tomcatVersion = '9.0.98'
+def tomcatVersion = '9.0.121'
 
 dependencies {
     // "compileOnly" because at runtime these classes are provided by
