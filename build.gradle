@@ -1,10 +1,10 @@
 plugins {
     id 'java-library'
-    id 'com.diffplug.spotless' version '8.10.1'
+    id 'com.diffplug.spotless' version '8.10.2'
 }
 
 group = 'org.fakebelieve.tomcat'
-version = '1.0.0'
+version = '1.0.0-SNAPSHOT'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
