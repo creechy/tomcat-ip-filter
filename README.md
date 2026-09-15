@@ -1,4 +1,4 @@
-# tomcat-ip-filter
+# Tomcat IP Filter
 
 `tomcat-ip-filter` is a simple, lightweight library providing IP address and CIDR block filtering for Apache Tomcat. It supports both **Layer 4 (Transport/Socket Level)** and **Layer 7 (Application/Valve Level)** filtering, allowing you to secure your Tomcat deployments regardless of your network topology and load balancer configuration.
 
